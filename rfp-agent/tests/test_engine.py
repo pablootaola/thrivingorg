@@ -137,3 +137,31 @@ def test_pricing_floor_minimum_and_walkaway():
     assert d2.code == "PRICE" and d2.scope_cut_needed
     assert value_estimate(budget=50000)[3] == "published budget"
     assert value_estimate()[0] is None
+
+
+def test_bidnet_real_html_shapes():
+    d = FX / "bidnet"
+    n = bidnet_email.parse_message("Example Union School District Has Published a New Solicitation Matching Your Profile",
+                                   (d / "new.html").read_text())
+    assert n.kind == "new" and n.number == "EXSD-RFP-2026-0001"
+    o = n.opportunity
+    assert o.buyer == "Example Union School District" and o.lane == "Board"
+    assert o.due.tzinfo is not None and o.due.hour == 14 and "TRACKING_LINK" in o.flags
+    a = bidnet_email.parse_message(
+        "Addendum from BidNet Direct for Technical Assistance Services solicitation for City of Example",
+        (d / "addendum.html").read_text())
+    assert a.kind == "addendum" and a.number == "EX26-110" and a.buyer == "City of Example"
+    assert "addendum - 2" in a.link_text and "ADDENDUM_UNREAD" in a.flags
+    w = bidnet_email.parse_message("Award(s) Published for RFP-EX-26-046 - Workforce Analysis", (d / "award.html").read_text())
+    assert w.kind == "award" and w.number == "RFP-EX-26-046" and w.buyer == "City of Example"
+
+
+def test_source_alerts():
+    from rfp_engine.__main__ import source_alerts
+    from rfp_engine.sources import SourceHealth
+    ok, empty, bad = SourceHealth("A", raw_hits=5, relevant=0), SourceHealth("B"), SourceHealth("C")
+    bad.fail("boom")
+    state = {"history": {"A": [{"relevant": 0}]}}
+    al = source_alerts([ok, empty, bad], state)
+    assert any("A has yielded 0" in x for x in al) and any("B returned 0" in x for x in al) and any("C DEGRADED" in x for x in al)
+    assert source_alerts([empty], {}, {"B"}) == []

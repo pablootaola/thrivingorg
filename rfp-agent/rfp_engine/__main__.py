@@ -32,7 +32,12 @@ def cmd_sweep(a) -> int:
     now = _now()
     out = Path(a.out or f"runs/{now.astimezone(MADRID):%Y-%m-%d_%H%M}")
     out.mkdir(parents=True, exist_ok=True)
-    adapters = {"sam": lambda: sam.sweep(now=now), "grants": grants.sweep,
+    state_path = Path(a.state)
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    since = None
+    if a.since_last and state.get("sam_last_run"):
+        since = datetime.fromisoformat(state["sam_last_run"])
+    adapters = {"sam": lambda: sam.sweep(now=now, since=since), "grants": grants.sweep,
                 "canadabuys": lambda: canadabuys.sweep(now=now)}
     opps, health = [], []
     for name in a.sources.split(","):
@@ -40,6 +45,18 @@ def cmd_sweep(a) -> int:
         opps.extend(found)
         health.append(h)
         print(f"{h.source}: {h.status} queries={h.queries} raw={h.raw_hits} relevant={h.relevant}", file=sys.stderr)
+    alerts = source_alerts(health, state, {"SAM.gov"} if since else set())
+    for al in alerts:
+        print("ALERT " + al, file=sys.stderr)
+    state.setdefault("history", {})
+    for h in health:
+        hist = state["history"].setdefault(h.source, [])
+        hist.append({"at": now.isoformat(), "status": h.status, "raw": h.raw_hits, "relevant": h.relevant})
+        del hist[:-14]
+    if all(h.status == "HEALTHY" for h in health if h.source == "SAM.gov"):
+        state["sam_last_run"] = now.isoformat()
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps(state, indent=1))
     master = rows_from_csv(Path(a.master).read_text(encoding="utf-8")) if a.master else []
     idx = BoardIndex(master)
     new, dup = [], []
@@ -62,6 +79,9 @@ def cmd_sweep(a) -> int:
              f"Master rows compared: {len(master)}. New: {len(new)}. Already on board: {len(dup)}.", "",
              "| Source | Status | Queries | Raw hits | Relevant |", "|---|---|---|---|---|"]
     lines += [f"| {h.source} | {h.status} | {h.queries} | {h.raw_hits} | {h.relevant} |" for h in health]
+    lines += ["", "## Alerts", ""] + ([f"- {al}" for al in alerts] or ["- none"])
+    if since:
+        lines += ["", f"SAM.gov fetched incrementally: notices modified since {since.isoformat()}."]
     lines += ["", "## New rows, soonest deadline first", ""]
     for o in new:
         tz = None
@@ -70,6 +90,22 @@ def cmd_sweep(a) -> int:
     (out / "SWEEP.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(out)
     return 0
+
+
+def source_alerts(health, state, incremental: set[str] | None = None) -> list[str]:
+    """A source that errors, returns nothing, or yields zero relevant rows twice running is an alert.
+    Quiet and broken must never look the same."""
+    out = []
+    hist = state.get("history", {})
+    for h in health:
+        if h.status != "HEALTHY":
+            out.append(f"{h.source} {h.status}: {'; '.join(h.errors[:3])}")
+        elif h.raw_hits == 0 and h.source not in (incremental or set()):
+            out.append(f"{h.source} returned 0 raw hits: check the endpoint before trusting silence")
+        prev = (hist.get(h.source) or [])[-1:] or [None]
+        if h.source not in (incremental or set()) and h.relevant == 0 and prev[0] and prev[0].get("relevant") == 0:
+            out.append(f"{h.source} has yielded 0 relevant rows two runs in a row: retune or retire")
+    return out
 
 
 def cmd_merge(a) -> int:
@@ -93,8 +129,17 @@ def cmd_acquire_sam(a) -> int:
 
 
 def cmd_bidnet(a) -> int:
+    from dataclasses import asdict
+
     from .sources import bidnet_email
-    opps = bidnet_email.parse(Path(a.body).read_text(encoding="utf-8"))
+    body = Path(a.body).read_text(encoding="utf-8")
+    if a.subject or body.lstrip().lower().startswith(("<!doctype", "<html")):
+        n = bidnet_email.parse_message(a.subject or "", body_html=body)
+        d = asdict(n)
+        d["opportunity"] = n.opportunity.to_dict() if n.opportunity else None
+        print(json.dumps(d, indent=1))
+        return 0
+    opps = bidnet_email.parse(body)
     print(json.dumps([o.to_dict() for o in opps], indent=1))
     return 0
 
@@ -107,6 +152,8 @@ def main(argv=None) -> int:
     s.add_argument("--out")
     s.add_argument("--master", help="CSV export of the master data tab (header row first)")
     s.add_argument("--stage", default="")
+    s.add_argument("--since-last", action="store_true", help="SAM.gov: only notices modified since the last healthy run")
+    s.add_argument("--state", default="runs/state.json")
     s.set_defaults(fn=cmd_sweep)
     m = sub.add_parser("merge")
     m.add_argument("--master", required=True)
@@ -121,6 +168,7 @@ def main(argv=None) -> int:
     q.set_defaults(fn=cmd_acquire_sam)
     b = sub.add_parser("bidnet-email")
     b.add_argument("body")
+    b.add_argument("--subject", default="", help="email subject; needed to classify HTML notices")
     b.set_defaults(fn=cmd_bidnet)
     a = p.parse_args(argv)
     return a.fn(a)

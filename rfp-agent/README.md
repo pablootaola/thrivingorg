@@ -6,11 +6,11 @@ Mechanics for the Thriving Culture RFP agent (`.claude/agents/rfp-agent.md` and 
 
 | Capability | Module | Status |
 |---|---|---|
-| SAM.gov search, notice detail, public attachment list and download, no API key | `sources/sam.py` | Live-tested 17 Nov 2026 |
+| SAM.gov search, notice detail, public attachment list and download, no API key; parallel, optional incremental | `sources/sam.py` | Live-tested 17 Nov 2026; full SAM.gov plus Grants.gov sweep about 10 s |
 | Grants.gov search2 API | `sources/grants.py` | Live-tested 17 Nov 2026 |
 | CanadaBuys open-data CSV (BOM, multiline fields) | `sources/canadabuys.py` | Live-tested 17 Nov 2026 |
 | MERX ID classes and URL templates, GC relay routing | `sources/merx.py` | Unit-tested; fetching needs Pablo's session |
-| BidNet notification email parser | `sources/bidnet_email.py` | Unit-tested on synthetic bodies; tune on real mail |
+| BidNet notification email parser (new, addendum, award; HTML) | `sources/bidnet_email.py` | Tuned 17 Nov 2026 on the real HTML layout; test fixtures are synthetic copies of that layout |
 | Keyword lanes (core, board, digital) with title-only boilerplate terms and negatives | `keywords.py` | Tuned on 17 Nov live data |
 | 36-column board row, cleaning, TSV, 28 + 8 paste blocks | `model.py` | Unit-tested |
 | Dedupe: source URL, number plus buyer, number, fuzzy buyer plus title, containment | `dedupe.py` | Unit-tested; run against the live board |
@@ -29,7 +29,7 @@ python -m pytest -q
 python -m rfp_engine sweep --master master_keys.csv --out runs/$(date +%F)
 ```
 
-Outputs go to `runs/` (gitignored): `staging_rows.tsv`, `opportunities.json`, `duplicates.json`, `health.json`, `SWEEP.md`.
+Outputs go to `runs/` (gitignored): `staging_rows.tsv`, `opportunities.json`, `duplicates.json`, `health.json`, `SWEEP.md` (with an Alerts section), and `runs/state.json` (last healthy SAM.gov run and 14 runs of per-source history).
 
 ## Network
 

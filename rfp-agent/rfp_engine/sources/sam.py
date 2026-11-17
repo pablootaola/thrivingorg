@@ -67,7 +67,9 @@ def to_opportunity(r: dict) -> Opportunity:
     return opp
 
 
-def search(q: str | None = None, naics: str | None = None, size: int = 100, max_pages: int = 3) -> list[dict]:
+def search(q: str | None = None, naics: str | None = None, size: int = 100, max_pages: int = 3,
+           since: datetime | None = None) -> list[dict]:
+    """Newest-modified first. With `since`, stop paging once results are older than it."""
     out = []
     for page in range(max_pages):
         params = {"index": "opp", "page": page, "size": size, "mode": "search",
@@ -80,7 +82,13 @@ def search(q: str | None = None, naics: str | None = None, size: int = 100, max_
         r.raise_for_status()
         d = r.json()
         res = (d.get("_embedded") or {}).get("results") or []
-        out.extend(res)
+        if since:
+            fresh = [x for x in res if (_parse_dt(x.get("modifiedDate")) or since) >= since]
+            out.extend(fresh)
+            if len(fresh) < len(res):
+                break
+        else:
+            out.extend(res)
         pg = d.get("page") or {}
         if page + 1 >= min(pg.get("totalPages", 0), max_pages) or not res:
             break
@@ -113,21 +121,33 @@ def attachments(notice_id: str) -> list[dict]:
 
 
 def sweep(themes: dict | None = None, naics_codes: list[str] | None = None,
-          now: datetime | None = None) -> tuple[list[Opportunity], SourceHealth]:
+          now: datetime | None = None, since: datetime | None = None,
+          workers: int = 6) -> tuple[list[Opportunity], SourceHealth]:
+    from concurrent.futures import ThreadPoolExecutor
+
     themes = themes or PORTAL_THEMES
     naics_codes = naics_codes if naics_codes is not None else NAICS
     health = SourceHealth("SAM.gov")
     seen: dict[str, Opportunity] = {}
     queries = [("q", t) for terms in themes.values() for t in terms] + [("naics", n) for n in naics_codes]
-    for kind, val in queries:
-        health.queries += 1
+
+    def run(kv):
+        kind, val = kv
         try:
-            results = search(q=val if kind == "q" else None, naics=val if kind == "naics" else None)
+            return kind, val, search(q=val if kind == "q" else None, naics=val if kind == "naics" else None,
+                                     since=since), None
         except Exception as e:  # network or schema change
-            health.fail(f"{kind}={val}: {e}")
+            return kind, val, [], e
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        results = list(ex.map(run, queries))
+    for kind, val, res, err in results:
+        health.queries += 1
+        if err:
+            health.fail(f"{kind}={val}: {err}")
             continue
-        health.raw_hits += len(results)
-        for r in results:
+        health.raw_hits += len(res)
+        for r in res:
             if r.get("isCanceled") or not r.get("isActive", True):
                 continue
             if (r.get("type") or {}).get("value") in SKIP_TYPES:

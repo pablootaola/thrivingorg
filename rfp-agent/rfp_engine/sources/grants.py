@@ -51,27 +51,36 @@ def to_opportunity(h: dict) -> Opportunity:
     return opp
 
 
-def sweep(themes: dict | None = None, rows: int = 100) -> tuple[list[Opportunity], SourceHealth]:
+def sweep(themes: dict | None = None, rows: int = 100, workers: int = 6) -> tuple[list[Opportunity], SourceHealth]:
+    from concurrent.futures import ThreadPoolExecutor
+
     themes = themes or PORTAL_THEMES
     health = SourceHealth("Grants.gov")
     seen: dict[str, Opportunity] = {}
-    for terms in themes.values():
-        for t in terms:
-            health.queries += 1
-            try:
-                d = post_search(t, rows)
-            except Exception as e:
-                health.fail(f"{t}: {e}")
+    terms = [t for ts in themes.values() for t in ts]
+
+    def run(t):
+        try:
+            return t, post_search(t, rows), None
+        except Exception as e:
+            return t, {}, e
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        results = list(ex.map(run, terms))
+    for t, d, err in results:
+        health.queries += 1
+        if err:
+            health.fail(f"{t}: {err}")
+            continue
+        hits = (d.get("data") or {}).get("oppHits") or []
+        health.raw_hits += len(hits)
+        for h in hits:
+            key = str(h.get("id"))
+            if key in seen:
                 continue
-            hits = (d.get("data") or {}).get("oppHits") or []
-            health.raw_hits += len(hits)
-            for h in hits:
-                key = str(h.get("id"))
-                if key in seen:
-                    continue
-                m = match(h.get("title", ""))
-                if m.relevant:
-                    seen[key] = to_opportunity(h)
+            m = match(h.get("title", ""))
+            if m.relevant:
+                seen[key] = to_opportunity(h)
     health.relevant = len(seen)
     return list(seen.values()), health
 
