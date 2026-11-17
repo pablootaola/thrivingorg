@@ -188,3 +188,22 @@ def test_scoring_reasons_and_tiers():
     assert good.tier == "A" and bad.tier == "C"
     assert any("set-aside" in r for r in good.win_reasons) and any("French" in r for r in bad.fit_reasons)
     assert good.summary().startswith("FIT ")
+
+
+def test_totp_rfc6238_vector_and_no_secret_leak(monkeypatch):
+    import subprocess
+    from rfp_engine import portals
+    seed = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # RFC 6238 test key "12345678901234567890"
+    assert portals.totp(seed, at=59) == "287082"
+    assert portals.totp(seed, at=1111111109) == "081804"
+    js = subprocess.run(["node", "-e", "console.log(require('./portals/totp.js').totp(process.argv[1], 59000))", seed],
+                        capture_output=True, text=True, cwd=Path(__file__).parent.parent)
+    assert js.stdout.strip() == "287082"
+    monkeypatch.delenv("MERX_USERNAME", raising=False)
+    monkeypatch.delenv("MERX_PASSWORD", raising=False)
+    r = portals.check(["MERX"])[0]
+    assert r.status == "MISSING_CREDENTIALS" and "MERX_PASSWORD" in str(r)
+    monkeypatch.setenv("BONFIRE_USERNAME", "u-secret-value")
+    monkeypatch.setenv("BONFIRE_PASSWORD", "p-secret-value")
+    r = portals.check(["BONFIRE"])[0]
+    assert r.status == "NEEDS_BROWSER" and "secret-value" not in str(r)

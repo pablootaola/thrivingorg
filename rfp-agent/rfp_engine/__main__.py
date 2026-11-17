@@ -153,6 +153,20 @@ def cmd_bidnet(a) -> int:
     return 0
 
 
+def cmd_portal_check(a) -> int:
+    from .portals import PORTALS, check, env_names, required_hosts
+    if a.list:
+        for k, (name, style, base, hosts) in PORTALS.items():
+            u, p, t = env_names(k)
+            print(f"{k:14} {name} | {u}, {p}, {t} (optional) | {base}")
+        print("hosts the environment must allow: " + ", ".join(required_hosts()))
+        return 0
+    results = check([k.upper() for k in a.keys] or None)
+    for r in results:
+        print(r)
+    return 0 if all(r.status in ("LOGGED_IN", "NEEDS_BROWSER", "MISSING_CREDENTIALS") for r in results) else 1
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="rfp_engine")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -179,6 +193,10 @@ def main(argv=None) -> int:
     b.add_argument("body")
     b.add_argument("--subject", default="", help="email subject; needed to classify HTML notices")
     b.set_defaults(fn=cmd_bidnet)
+    pc = sub.add_parser("portal-check", help="test portal logins from environment variables; prints status only")
+    pc.add_argument("keys", nargs="*")
+    pc.add_argument("--list", action="store_true", help="list portal keys, variable names and required hosts")
+    pc.set_defaults(fn=cmd_portal_check)
     a = p.parse_args(argv)
     return a.fn(a)
 
