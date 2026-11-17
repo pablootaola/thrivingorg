@@ -18,6 +18,7 @@ Mechanics for the Thriving Culture RFP agent (`.claude/agents/rfp-agent.md` and 
 | Intake screens (detections only; UNREAD until the primary is read) | `screen.py` | Unit-tested |
 | Price decision (card, benchmark, floor, minimum, walk-away) and value estimate | `pricing.py` | Unit-tested; numbers come from the private rubric |
 | Download, hash, count on disk, `00_SOURCE.md` | `acquire.py` | Live-tested on four SAM notices |
+| Fit and win-likelihood scores (0 to 100 each) with a reason per point, tiers A, B, C | `scoring.py` | First proposal 17 Nov 2026; to be refit from outcomes |
 | Proposal PDF build with face tokens, header and footer bands, no split tables | `proposal/build_pdf.js` | Smoke-tested |
 
 ## Run

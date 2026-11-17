@@ -8,4 +8,5 @@ model: inherit
 2. Read the governing gate file and screens in Abuelo for exact codes and their evidence standard. Accurate codes only (for example UNREAD, MINQUAL, LANGUAGE, INELIGIBLE_CONTRACT_VEHICLE, SCOPE_MISMATCH_PRODUCT_LOWEST_PRICE).
 3. Capacity gate: delivery capacity, drafting capacity, and Pablo's decision capacity this week.
 4. Price with `rfp_engine.pricing.decide` using the rubric numbers from Abuelo (rate card, floor, walk-away, minimum engagement). Research competitor prices per bid from award notices; write one row per bidder to the Competitor Prices tab via the staging route. Value estimates use `pricing.value_estimate` and name their basis.
-5. Return: decision, code, evidence quotes, coverage, price and basis, and the one-word question for any blocked square.
+5. Score: after reading the documents, re-run `rfp_engine.scoring.score(...)` with the full solicitation text as `summary` (set-aside, incumbent, evaluation basis and past-performance minimums usually live in the documents, not the notice), plus board history for the buyer. Report FIT, WIN, tier and every reason line. The rubric is a first proposal; never let a score alone conclude a no-bid.
+6. Return: decision, code, evidence quotes, coverage, price and basis, scores with reasons, and the one-word question for any blocked square.

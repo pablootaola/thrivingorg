@@ -165,3 +165,26 @@ def test_source_alerts():
     al = source_alerts([ok, empty, bad], state)
     assert any("A has yielded 0" in x for x in al) and any("B returned 0" in x for x in al) and any("C DEGRADED" in x for x in al)
     assert source_alerts([empty], {}, {"B"}) == []
+
+
+def test_keywords_17nov_additions():
+    for t in ["Strategic Plan Development", "Community Needs Assessment for County Staff", "Desarrollo de Liderazgo para Directivos",
+              "Planificación Estratégica Institucional", "Website Accessibility and WCAG Remediation", "ADA Title II Digital Compliance",
+              "Employer Branding and Storytelling Services"]:
+        assert keywords.match(t).relevant, t
+    assert not keywords.match("Paid Media Buying and Advertising Campaign").relevant
+
+
+def test_scoring_reasons_and_tiers():
+    from rfp_engine.scoring import score
+    now = datetime(2026, 11, 17, tzinfo=MAD)
+    good = score(title="Board Governance Training and Leadership Development", buyer="Example Union School District",
+                 lane="Board", summary="Total small business set-aside. New requirement. Best value tradeoff.",
+                 due=datetime(2026, 12, 20, tzinfo=MAD), now=now)
+    bad = score(title="Training software subscription", buyer="Department of X", lane="Core",
+                summary="Lowest price technically acceptable. Incumbent contract.", flags=["LANGUAGE_TIER3"],
+                due=datetime(2026, 11, 18, tzinfo=MAD), now=now)
+    assert good.fit > bad.fit and good.win > bad.win
+    assert good.tier == "A" and bad.tier == "C"
+    assert any("set-aside" in r for r in good.win_reasons) and any("French" in r for r in bad.fit_reasons)
+    assert good.summary().startswith("FIT ")

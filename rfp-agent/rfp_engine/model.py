@@ -84,6 +84,10 @@ class Opportunity:
     value_mid: float | None = None
     value_high: float | None = None
     value_basis: str = ""
+    fit: int | None = None
+    win: int | None = None
+    tier: str = ""
+    score_summary: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -109,11 +113,11 @@ class Opportunity:
             "v_docs": "y" if self.documents else "n",
             "v_addenda": "n",
             "effort_h": "",
-            "win_pct": "",
+            "win_pct": "" if self.win is None else str(self.win),
             "next_action": "Acquire documents and run the 360 read" if self.documents else "Trace to buyer record and acquire documents",
             "outcome": "",
             "source_url": self.authoritative_url or self.source_url,
-            "summary": self.summary[:900],
+            "summary": ((self.score_summary + " ") if self.score_summary else "") + self.summary[:900],
             "doc_link": "",
             "bid_amount": "",
             "bid_date": "",

@@ -17,7 +17,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from .dedupe import BoardIndex
+from .dedupe import BoardIndex, norm_buyer, similarity
+from .scoring import score
 from .merge import plan_merge, rows_from_csv
 from .model import MADRID, UTC, deadline_pair, to_tsv
 from .screen import intake
@@ -68,8 +69,13 @@ def cmd_sweep(a) -> int:
         sr = intake(f"{o.title} {o.summary}", buyer=o.buyer, region=o.region,
                     is_gc=o.record_class == "gc-canadabuys", due=o.due, now=now)
         o.flags = sorted(set(o.flags + sr.flags))
+        nb = norm_buyer(o.buyer)
+        hist = [r for r in master if nb and similarity(nb, norm_buyer(r.get("buyer", ""))) >= 0.85]
+        sc = score(title=o.title, summary=o.summary, buyer=o.buyer, lane=o.lane, notice_type=o.notice_type,
+                   flags=o.flags, due=o.due, now=now, value_mid=o.value_mid, board_history=hist)
+        o.fit, o.win, o.tier, o.score_summary = sc.fit, sc.win, sc.tier, sc.summary()
         new.append(o)
-    new.sort(key=lambda o: (o.due is None, o.due or now))
+    new.sort(key=lambda o: (o.tier or "Z", -(o.fit or 0) - (o.win or 0), o.due is None, o.due or now))
     rows = [o.board_row(stage=a.stage or "Verify") for o in new]
     (out / "staging_rows.tsv").write_text(to_tsv(rows), encoding="utf-8")
     (out / "opportunities.json").write_text(json.dumps([o.to_dict() for o in new], indent=1), encoding="utf-8")
@@ -82,11 +88,14 @@ def cmd_sweep(a) -> int:
     lines += ["", "## Alerts", ""] + ([f"- {al}" for al in alerts] or ["- none"])
     if since:
         lines += ["", f"SAM.gov fetched incrementally: notices modified since {since.isoformat()}."]
-    lines += ["", "## New rows, soonest deadline first", ""]
+    lines += ["", "## New rows, by tier (A build now, B read and decide, C screen if capacity allows)", "",
+              "| Tier | Fit | Win | Deadline | Lane | Buyer | Number | Title |", "|---|---|---|---|---|---|---|---|"]
     for o in new:
-        tz = None
-        lines.append(f"- {deadline_pair(o.due) or 'deadline not established'} | {o.lane or 'lane?'} | "
-                     f"{o.buyer} | {o.number} | {o.title} | {o.source_url} | flags: {', '.join(o.flags) or 'none'}")
+        lines.append(f"| {o.tier} | {o.fit} | {o.win} | {deadline_pair(o.due) or 'not established'} | {o.lane or '?'} | "
+                     f"{o.buyer} | {o.number} | [{o.title}]({o.source_url}) |")
+    lines += ["", "## Why each score", ""]
+    for o in new:
+        lines.append(f"- **{o.title}** ({o.buyer}): {o.score_summary} Flags: {', '.join(o.flags) or 'none'}")
     (out / "SWEEP.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(out)
     return 0
