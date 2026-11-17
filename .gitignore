@@ -12,3 +12,10 @@ npm-debug.log*
 # Local build/output
 dist/
 .cache/
+
+# RFP agent: run outputs and private data never committed
+rfp-agent/runs/
+rfp-agent/**/faces*.json
+rfp-agent/**/*.local.*
+__pycache__/
+.pytest_cache/
