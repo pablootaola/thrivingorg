@@ -53,7 +53,7 @@ def cmd_sweep(a) -> int:
         o.flags = sorted(set(o.flags + sr.flags))
         new.append(o)
     new.sort(key=lambda o: (o.due is None, o.due or now))
-    rows = [o.board_row(stage="Discovered" if not a.stage else a.stage) for o in new]
+    rows = [o.board_row(stage=a.stage or "Verify") for o in new]
     (out / "staging_rows.tsv").write_text(to_tsv(rows), encoding="utf-8")
     (out / "opportunities.json").write_text(json.dumps([o.to_dict() for o in new], indent=1), encoding="utf-8")
     (out / "duplicates.json").write_text(json.dumps(dup, indent=1), encoding="utf-8")

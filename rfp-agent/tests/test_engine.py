@@ -20,6 +20,7 @@ MAD = ZoneInfo("Europe/Madrid")
 def test_keywords_strong_and_negative():
     assert keywords.match("Leadership development and executive coaching for county managers").relevant
     assert not keywords.match("Small craft coxswain and rescue training").relevant
+    assert not keywords.match("APN_Construction of Training Quarters").relevant
     assert not keywords.match("Annual training").strong  # weak term, no org context
     assert keywords.match("Annual training for staff supervisors").strong
     m = keywords.match("Board of Directors governance retreat facilitation")

@@ -79,7 +79,7 @@ LANES = {"board": BOARD, "core": CORE + ENGAGEMENT_TYPES, "digital": DIGITAL}
 def _compile(term: str) -> re.Pattern:
     words = [re.escape(w) for w in term.split()]
     flags = 0 if term.isupper() else re.IGNORECASE  # acronyms (DEI, SEO, CMS) match case-sensitively
-    return re.compile(r"\b" + r"[\s\-]+".join(words) + r"\b", flags)
+    return re.compile(r"(?<![A-Za-z0-9])" + r"[\s\-_]+".join(words) + r"(?![A-Za-z0-9])", flags)
 
 
 _COMPILED = {lane: [(t, _compile(t)) for t in terms] for lane, terms in LANES.items()}
